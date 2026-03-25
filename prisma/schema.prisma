@@ -1,0 +1,279 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URI")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  OWNER
+  OPERATOR
+}
+
+enum ConsignmentStatus {
+  OPEN
+  CLOSED
+}
+
+enum CommissionType {
+  PERCENTAGE
+  FIXED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK
+  MOBILE_WALLET
+  ADJUSTMENT
+}
+
+enum ExpenseType {
+  LABOUR
+  VEHICLE_RENT
+  COMMISSION
+  OTHER
+}
+
+enum SettlementStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+model Tenant {
+  id           Int                 @id @default(autoincrement())
+  name         String
+  slug         String              @unique
+  phone        String?
+  address      String?
+  locale       String              @default("ur-PK")
+  currency     String              @default("PKR")
+  isActive     Boolean             @default(true)
+  users        User[]
+  customers    Customer[]
+  suppliers    Supplier[]
+  consignments Consignment[]
+  sales        Sale[]
+  payments     Payment[]
+  expenses     Expense[]
+  settlements  SupplierSettlement[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model Password {
+  hash   String
+  userId Int    @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id                  Int            @id @default(autoincrement())
+  tenantId            Int
+  name                String
+  email               String
+  phone               String?
+  role                UserRole
+  isActive            Boolean        @default(true)
+  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  password            Password?
+  createdById         Int?
+  createdBy           User?          @relation("UserCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers        User[]         @relation("UserCreator")
+  salesCreated        Sale[]         @relation("SaleCreatedBy")
+  paymentsCreated     Payment[]      @relation("PaymentCreatedBy")
+  expensesCreated     Expense[]      @relation("ExpenseCreatedBy")
+  consignmentsCreated Consignment[]  @relation("ConsignmentCreatedBy")
+  consignmentsClosed  Consignment[]  @relation("ConsignmentClosedBy")
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId, role])
+}
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  name      String
+  phone     String?
+  address   String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sales     Sale[]
+  payments  Payment[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, name])
+  @@index([tenantId, phone])
+}
+
+model Supplier {
+  id           Int                 @id @default(autoincrement())
+  tenantId     Int
+  name         String
+  phone        String?
+  address      String?
+  notes        String?
+  isActive     Boolean             @default(true)
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  consignments Consignment[]
+  settlements  SupplierSettlement[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([tenantId, name])
+  @@index([tenantId, phone])
+}
+
+model Consignment {
+  id              Int               @id @default(autoincrement())
+  tenantId        Int
+  supplierId      Int
+  vehicleNumber   String
+  driverName      String?
+  driverPhone     String?
+  arrivalDate     DateTime
+  status          ConsignmentStatus @default(OPEN)
+  notes           String?
+  commissionType  CommissionType    @default(PERCENTAGE)
+  commissionValue Decimal           @db.Decimal(12, 2)
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier        Supplier          @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  items           ConsignmentItem[]
+  expenses        Expense[]
+  saleItems       SaleItem[]
+  settlement      SupplierSettlement?
+  createdById     Int
+  createdBy       User              @relation("ConsignmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  closedById      Int?
+  closedBy        User?             @relation("ConsignmentClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  closedAt        DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([tenantId, supplierId, status])
+  @@index([tenantId, arrivalDate])
+}
+
+model ConsignmentItem {
+  id               Int             @id @default(autoincrement())
+  consignmentId    Int
+  productNameUrdu  String
+  productNameRoman String?
+  unit             String          @default("kg")
+  quantityReceived Decimal         @db.Decimal(12, 3)
+  baseRate         Decimal?        @db.Decimal(12, 2)
+  consignment      Consignment     @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+  saleItems        SaleItem[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([consignmentId, productNameUrdu])
+}
+
+model Sale {
+  id            Int       @id @default(autoincrement())
+  tenantId      Int
+  customerId    Int
+  invoiceNumber String    @unique
+  saleDate      DateTime
+  notes         String?
+  totalAmount   Decimal   @db.Decimal(14, 2)
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  items         SaleItem[]
+  createdById   Int
+  createdBy     User      @relation("SaleCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([tenantId, customerId, saleDate])
+  @@index([tenantId, saleDate])
+}
+
+model SaleItem {
+  id                Int             @id @default(autoincrement())
+  saleId            Int
+  consignmentId     Int
+  consignmentItemId Int
+  productNameUrdu   String
+  quantity          Decimal         @db.Decimal(12, 3)
+  rate              Decimal         @db.Decimal(12, 2)
+  lineTotal         Decimal         @db.Decimal(14, 2)
+  sale              Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  consignment       Consignment     @relation(fields: [consignmentId], references: [id], onDelete: Restrict)
+  consignmentItem   ConsignmentItem @relation(fields: [consignmentItemId], references: [id], onDelete: Restrict)
+  createdAt         DateTime        @default(now())
+
+  @@index([saleId])
+  @@index([consignmentId])
+  @@index([consignmentItemId])
+}
+
+model Payment {
+  id          Int           @id @default(autoincrement())
+  tenantId    Int
+  customerId  Int
+  amount      Decimal       @db.Decimal(14, 2)
+  paymentDate DateTime
+  method      PaymentMethod @default(CASH)
+  reference   String?
+  notes       String?
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer    Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdById Int
+  createdBy   User          @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([tenantId, customerId, paymentDate])
+  @@index([tenantId, paymentDate])
+}
+
+model Expense {
+  id            Int         @id @default(autoincrement())
+  tenantId      Int
+  consignmentId Int?
+  expenseType   ExpenseType
+  titleUrdu     String
+  amount        Decimal     @db.Decimal(14, 2)
+  expenseDate   DateTime
+  notes         String?
+  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  consignment   Consignment? @relation(fields: [consignmentId], references: [id], onDelete: SetNull)
+  createdById   Int
+  createdBy     User        @relation("ExpenseCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([tenantId, expenseDate])
+  @@index([tenantId, consignmentId])
+}
+
+model SupplierSettlement {
+  id               Int              @id @default(autoincrement())
+  tenantId         Int
+  consignmentId    Int              @unique
+  supplierId       Int
+  grossSales       Decimal          @db.Decimal(14, 2)
+  commissionAmount Decimal          @db.Decimal(14, 2)
+  expenseAmount    Decimal          @db.Decimal(14, 2)
+  netPayable       Decimal          @db.Decimal(14, 2)
+  amountPaid       Decimal          @default(0) @db.Decimal(14, 2)
+  balanceAmount    Decimal          @db.Decimal(14, 2)
+  status           SettlementStatus @default(PENDING)
+  settledAt        DateTime?
+  notes            String?
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  consignment      Consignment      @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+  supplier         Supplier         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([tenantId, supplierId, status])
+}
