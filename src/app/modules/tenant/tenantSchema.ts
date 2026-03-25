@@ -1,10 +1,15 @@
-import { z } from "zod"
+import { FromSchema } from "json-schema-to-ts"
 
-export const updateTenantSchema = z.object({
-  name: z.string().trim().min(2).optional(),
-  phone: z.string().trim().optional(),
-  address: z.string().trim().optional(),
-  locale: z.string().trim().optional(),
-  currency: z.string().trim().optional(),
-  isActive: z.boolean().optional(),
-})
+export const UpdateTenantSchema = {
+  type: "object",
+  properties: {
+    name: { type: "string", minLength: 2 },
+    phone: { type: "string" },
+    address: { type: "string" },
+    locale: { type: "string" },
+    currency: { type: "string" },
+    isActive: { type: "boolean" },
+  },
+  additionalProperties: false,
+} as const
+export type UpdateTenant = FromSchema<typeof UpdateTenantSchema>

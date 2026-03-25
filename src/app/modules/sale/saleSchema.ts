@@ -1,23 +1,50 @@
-import { z } from "zod"
-import { paginationSchema } from "../shared/schema"
+import { FromSchema } from "json-schema-to-ts"
+import { PaginationQuerySchema } from "../shared/schema"
 
-const saleItemSchema = z.object({
-  consignmentId: z.coerce.number().int().positive(),
-  consignmentItemId: z.coerce.number().int().positive(),
-  productNameUrdu: z.string().trim().min(1),
-  quantity: z.coerce.number().positive(),
-  rate: z.coerce.number().positive(),
-})
+const SaleItemSchema = {
+  type: "object",
+  properties: {
+    consignmentId: { type: "number" },
+    consignmentItemId: { type: "number" },
+    productNameUrdu: { type: "string", minLength: 1 },
+    quantity: { type: "number", exclusiveMinimum: 0 },
+    rate: { type: "number", exclusiveMinimum: 0 },
+  },
+  required: ["consignmentId", "consignmentItemId", "productNameUrdu", "quantity", "rate"],
+  additionalProperties: false,
+} as const
+export type SaleItemBody = FromSchema<typeof SaleItemSchema>
 
-export const listSaleQuerySchema = paginationSchema.extend({
-  customerId: z.coerce.number().int().positive().optional(),
-})
+export const ListSaleQuerySchema = {
+  type: "object",
+  properties: {
+    ...PaginationQuerySchema.properties,
+    customerId: { type: "number" },
+  },
+  additionalProperties: false,
+} as const
+export type ListSaleQuery = FromSchema<typeof ListSaleQuerySchema>
 
-export const createSaleSchema = z.object({
-  customerId: z.coerce.number().int().positive(),
-  saleDate: z.coerce.date(),
-  notes: z.string().trim().optional(),
-  items: z.array(saleItemSchema).min(1),
-})
+export const CreateSaleSchema = {
+  type: "object",
+  properties: {
+    customerId: { type: "number" },
+    saleDate: { type: "string", format: "date-time" },
+    notes: { type: "string" },
+    items: {
+      type: "array",
+      minItems: 1,
+      items: SaleItemSchema,
+    },
+  },
+  required: ["customerId", "saleDate", "items"],
+  additionalProperties: false,
+} as const
+export type CreateSale = FromSchema<typeof CreateSaleSchema>
 
-export const updateSaleSchema = createSaleSchema.partial()
+export const UpdateSaleSchema = {
+  type: "object",
+  properties: CreateSaleSchema.properties,
+  additionalProperties: false,
+} as const
+export type UpdateSale = FromSchema<typeof UpdateSaleSchema>

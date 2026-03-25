@@ -1,16 +1,33 @@
-import { z } from "zod"
-import { paginationSchema } from "../shared/schema"
+import { FromSchema } from "json-schema-to-ts"
+import { PaginationQuerySchema } from "../shared/schema"
 
-export const listSupplierQuerySchema = paginationSchema.extend({
-  isActive: z.coerce.boolean().optional(),
-})
+export const ListSupplierQuerySchema = {
+  type: "object",
+  properties: {
+    ...PaginationQuerySchema.properties,
+    isActive: { type: "boolean" },
+  },
+  additionalProperties: false,
+} as const
+export type ListSupplierQuery = FromSchema<typeof ListSupplierQuerySchema>
 
-export const createSupplierSchema = z.object({
-  name: z.string().trim().min(2),
-  phone: z.string().trim().optional(),
-  address: z.string().trim().optional(),
-  notes: z.string().trim().optional(),
-  isActive: z.boolean().optional().default(true),
-})
+export const CreateSupplierSchema = {
+  type: "object",
+  properties: {
+    name: { type: "string", minLength: 2 },
+    phone: { type: "string" },
+    address: { type: "string" },
+    notes: { type: "string" },
+    isActive: { type: "boolean", default: true },
+  },
+  required: ["name"],
+  additionalProperties: false,
+} as const
+export type CreateSupplier = FromSchema<typeof CreateSupplierSchema>
 
-export const updateSupplierSchema = createSupplierSchema.partial()
+export const UpdateSupplierSchema = {
+  type: "object",
+  properties: CreateSupplierSchema.properties,
+  additionalProperties: false,
+} as const
+export type UpdateSupplier = FromSchema<typeof UpdateSupplierSchema>

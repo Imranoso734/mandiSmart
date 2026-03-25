@@ -1,18 +1,17 @@
 import { FastifyReply, FastifyRequest } from "fastify"
-import { parseSchema } from "../shared/schema"
-import { loginSchema, registerOwnerSchema } from "./authSchema"
-import { AuthService } from "./authService"
 import { requestMeta } from "@/core/helpers/requestMeta"
+import { AuthService } from "./authService"
+import { LoginBody, RegisterOwner } from "./authSchema"
 
 export const AuthController = {
   async register(req: FastifyRequest, reply: FastifyReply) {
-    const payload = parseSchema(registerOwnerSchema, req.body)
+    const payload = req.body as RegisterOwner
     const data = await AuthService.registerOwner(payload)
     reply.status(201).send({ success: true, data })
   },
 
   async login(req: FastifyRequest, reply: FastifyReply) {
-    const payload = parseSchema(loginSchema, req.body)
+    const payload = req.body as LoginBody
     const data = await AuthService.login(payload)
     reply.send({ success: true, data })
   },

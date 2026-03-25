@@ -1,34 +1,68 @@
-import { CommissionType, ConsignmentStatus } from "@prisma/client"
-import { z } from "zod"
-import { paginationSchema } from "../shared/schema"
+import { FromSchema } from "json-schema-to-ts"
+import { PaginationQuerySchema } from "../shared/schema"
 
-const consignmentItemSchema = z.object({
-  productNameUrdu: z.string().trim().min(1),
-  productNameRoman: z.string().trim().optional(),
-  unit: z.string().trim().min(1).default("kg"),
-  quantityReceived: z.coerce.number().positive(),
-  baseRate: z.coerce.number().nonnegative().optional(),
-})
+const ConsignmentStatusEnum = ["OPEN", "CLOSED"] as const
+const CommissionTypeEnum = ["PERCENTAGE", "FIXED"] as const
 
-export const listConsignmentQuerySchema = paginationSchema.extend({
-  supplierId: z.coerce.number().int().positive().optional(),
-  status: z.nativeEnum(ConsignmentStatus).optional(),
-})
+const ConsignmentItemSchema = {
+  type: "object",
+  properties: {
+    productNameUrdu: { type: "string", minLength: 1 },
+    productNameRoman: { type: "string" },
+    unit: { type: "string", minLength: 1, default: "kg" },
+    quantityReceived: { type: "number", exclusiveMinimum: 0 },
+    baseRate: { type: "number", minimum: 0 },
+  },
+  required: ["productNameUrdu", "quantityReceived"],
+  additionalProperties: false,
+} as const
+export type ConsignmentItem = FromSchema<typeof ConsignmentItemSchema>
 
-export const createConsignmentSchema = z.object({
-  supplierId: z.coerce.number().int().positive(),
-  vehicleNumber: z.string().trim().min(2),
-  driverName: z.string().trim().optional(),
-  driverPhone: z.string().trim().optional(),
-  arrivalDate: z.coerce.date(),
-  notes: z.string().trim().optional(),
-  commissionType: z.nativeEnum(CommissionType).default(CommissionType.PERCENTAGE),
-  commissionValue: z.coerce.number().nonnegative(),
-  items: z.array(consignmentItemSchema).min(1),
-})
+export const ListConsignmentQuerySchema = {
+  type: "object",
+  properties: {
+    ...PaginationQuerySchema.properties,
+    supplierId: { type: "number" },
+    status: { type: "string", enum: ConsignmentStatusEnum },
+  },
+  additionalProperties: false,
+} as const
+export type ListConsignmentQuery = FromSchema<typeof ListConsignmentQuerySchema>
 
-export const updateConsignmentSchema = createConsignmentSchema.partial()
+export const CreateConsignmentSchema = {
+  type: "object",
+  properties: {
+    supplierId: { type: "number" },
+    vehicleNumber: { type: "string", minLength: 2 },
+    driverName: { type: "string" },
+    driverPhone: { type: "string" },
+    arrivalDate: { type: "string", format: "date-time" },
+    notes: { type: "string" },
+    commissionType: { type: "string", enum: CommissionTypeEnum, default: "PERCENTAGE" },
+    commissionValue: { type: "number", minimum: 0 },
+    items: {
+      type: "array",
+      minItems: 1,
+      items: ConsignmentItemSchema,
+    },
+  },
+  required: ["supplierId", "vehicleNumber", "arrivalDate", "commissionValue", "items"],
+  additionalProperties: false,
+} as const
+export type CreateConsignment = FromSchema<typeof CreateConsignmentSchema>
 
-export const closeConsignmentSchema = z.object({
-  notes: z.string().trim().optional(),
-})
+export const UpdateConsignmentSchema = {
+  type: "object",
+  properties: CreateConsignmentSchema.properties,
+  additionalProperties: false,
+} as const
+export type UpdateConsignment = FromSchema<typeof UpdateConsignmentSchema>
+
+export const CloseConsignmentSchema = {
+  type: "object",
+  properties: {
+    notes: { type: "string" },
+  },
+  additionalProperties: false,
+} as const
+export type CloseConsignment = FromSchema<typeof CloseConsignmentSchema>

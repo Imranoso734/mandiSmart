@@ -1,18 +1,30 @@
-import { z } from "zod"
+import { FromSchema } from "json-schema-to-ts"
 
-export const registerOwnerSchema = z.object({
-  tenantName: z.string().trim().min(2),
-  tenantSlug: z.string().trim().min(2).optional(),
-  tenantPhone: z.string().trim().optional(),
-  tenantAddress: z.string().trim().optional(),
-  ownerName: z.string().trim().min(2),
-  ownerEmail: z.string().email(),
-  ownerPhone: z.string().trim().optional(),
-  password: z.string().min(8),
-})
+export const RegisterOwnerSchema = {
+  type: "object",
+  properties: {
+    tenantName: { type: "string", minLength: 2 },
+    tenantSlug: { type: "string", minLength: 2 },
+    tenantPhone: { type: "string" },
+    tenantAddress: { type: "string" },
+    ownerName: { type: "string", minLength: 2 },
+    ownerEmail: { type: "string", format: "email" },
+    ownerPhone: { type: "string" },
+    password: { type: "string", minLength: 8 },
+  },
+  required: ["tenantName", "ownerName", "ownerEmail", "password"],
+  additionalProperties: false,
+} as const
+export type RegisterOwner = FromSchema<typeof RegisterOwnerSchema>
 
-export const loginSchema = z.object({
-  tenantSlug: z.string().trim().min(2),
-  email: z.string().email(),
-  password: z.string().min(1),
-})
+export const LoginSchema = {
+  type: "object",
+  properties: {
+    tenantSlug: { type: "string", minLength: 2 },
+    email: { type: "string", format: "email" },
+    password: { type: "string", minLength: 1 },
+  },
+  required: ["tenantSlug", "email", "password"],
+  additionalProperties: false,
+} as const
+export type LoginBody = FromSchema<typeof LoginSchema>

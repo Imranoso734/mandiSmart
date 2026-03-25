@@ -1,19 +1,37 @@
-import { ExpenseType } from "@prisma/client"
-import { z } from "zod"
-import { paginationSchema } from "../shared/schema"
+import { FromSchema } from "json-schema-to-ts"
+import { PaginationQuerySchema } from "../shared/schema"
 
-export const listExpenseQuerySchema = paginationSchema.extend({
-  consignmentId: z.coerce.number().int().positive().optional(),
-  expenseType: z.nativeEnum(ExpenseType).optional(),
-})
+const ExpenseTypeEnum = ["LABOUR", "VEHICLE_RENT", "COMMISSION", "OTHER"] as const
 
-export const createExpenseSchema = z.object({
-  consignmentId: z.coerce.number().int().positive().optional(),
-  expenseType: z.nativeEnum(ExpenseType),
-  titleUrdu: z.string().trim().min(1),
-  amount: z.coerce.number().positive(),
-  expenseDate: z.coerce.date(),
-  notes: z.string().trim().optional(),
-})
+export const ListExpenseQuerySchema = {
+  type: "object",
+  properties: {
+    ...PaginationQuerySchema.properties,
+    consignmentId: { type: "number" },
+    expenseType: { type: "string", enum: ExpenseTypeEnum },
+  },
+  additionalProperties: false,
+} as const
+export type ListExpenseQuery = FromSchema<typeof ListExpenseQuerySchema>
 
-export const updateExpenseSchema = createExpenseSchema.partial()
+export const CreateExpenseSchema = {
+  type: "object",
+  properties: {
+    consignmentId: { type: "number" },
+    expenseType: { type: "string", enum: ExpenseTypeEnum },
+    titleUrdu: { type: "string", minLength: 1 },
+    amount: { type: "number", exclusiveMinimum: 0 },
+    expenseDate: { type: "string", format: "date-time" },
+    notes: { type: "string" },
+  },
+  required: ["expenseType", "titleUrdu", "amount", "expenseDate"],
+  additionalProperties: false,
+} as const
+export type CreateExpense = FromSchema<typeof CreateExpenseSchema>
+
+export const UpdateExpenseSchema = {
+  type: "object",
+  properties: CreateExpenseSchema.properties,
+  additionalProperties: false,
+} as const
+export type UpdateExpense = FromSchema<typeof UpdateExpenseSchema>

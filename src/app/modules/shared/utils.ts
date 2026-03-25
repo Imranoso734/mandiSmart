@@ -42,3 +42,19 @@ export function paginate(page: number, limit: number): { skip: number; take: num
     take: limit,
   }
 }
+
+/**
+ * String ya date value ko Date object mein badalte hain.
+ */
+export function toDate(value?: string | Date): Date | undefined {
+  if (!value) return undefined
+  return value instanceof Date ? value : new Date(value)
+}
+
+/**
+ * Date-only string ko din ke start se parse karte hain.
+ */
+export function toDateOnly(value?: string): Date | undefined {
+  if (!value) return undefined
+  return new Date(`${value}T00:00:00.000Z`)
+}

@@ -1,19 +1,37 @@
-import { PaymentMethod } from "@prisma/client"
-import { z } from "zod"
-import { paginationSchema } from "../shared/schema"
+import { FromSchema } from "json-schema-to-ts"
+import { PaginationQuerySchema } from "../shared/schema"
 
-export const listPaymentQuerySchema = paginationSchema.extend({
-  customerId: z.coerce.number().int().positive().optional(),
-  method: z.nativeEnum(PaymentMethod).optional(),
-})
+const PaymentMethodEnum = ["CASH", "BANK", "MOBILE_WALLET", "ADJUSTMENT"] as const
 
-export const createPaymentSchema = z.object({
-  customerId: z.coerce.number().int().positive(),
-  amount: z.coerce.number().positive(),
-  paymentDate: z.coerce.date(),
-  method: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
-  reference: z.string().trim().optional(),
-  notes: z.string().trim().optional(),
-})
+export const ListPaymentQuerySchema = {
+  type: "object",
+  properties: {
+    ...PaginationQuerySchema.properties,
+    customerId: { type: "number" },
+    method: { type: "string", enum: PaymentMethodEnum },
+  },
+  additionalProperties: false,
+} as const
+export type ListPaymentQuery = FromSchema<typeof ListPaymentQuerySchema>
 
-export const updatePaymentSchema = createPaymentSchema.partial()
+export const CreatePaymentSchema = {
+  type: "object",
+  properties: {
+    customerId: { type: "number" },
+    amount: { type: "number", exclusiveMinimum: 0 },
+    paymentDate: { type: "string", format: "date-time" },
+    method: { type: "string", enum: PaymentMethodEnum, default: "CASH" },
+    reference: { type: "string" },
+    notes: { type: "string" },
+  },
+  required: ["customerId", "amount", "paymentDate"],
+  additionalProperties: false,
+} as const
+export type CreatePayment = FromSchema<typeof CreatePaymentSchema>
+
+export const UpdatePaymentSchema = {
+  type: "object",
+  properties: CreatePaymentSchema.properties,
+  additionalProperties: false,
+} as const
+export type UpdatePayment = FromSchema<typeof UpdatePaymentSchema>

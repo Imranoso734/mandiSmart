@@ -1,27 +1,22 @@
-import { z, ZodTypeAny } from "zod"
-import { ValidationException } from "@/core/entities/exceptions"
+import { FromSchema } from "json-schema-to-ts"
 
-export const idParamSchema = z.object({
-  id: z.coerce.number().int().positive(),
-})
+export const IdParamsSchema = {
+  type: "object",
+  properties: {
+    id: { type: "number" },
+  },
+  required: ["id"],
+  additionalProperties: false,
+} as const
+export type IdParams = FromSchema<typeof IdParamsSchema>
 
-export const paginationSchema = z.object({
-  page: z.coerce.number().int().positive().optional().default(1),
-  limit: z.coerce.number().int().positive().max(100).optional().default(20),
-  search: z.string().trim().optional(),
-})
-
-/**
- * Yahan request payload ko validate karke typed value nikalte hain.
- */
-export function parseSchema<T extends ZodTypeAny>(
-  schema: T,
-  input: unknown,
-): z.infer<T> {
-  const result = schema.safeParse(input)
-  if (!result.success) {
-    throw ValidationException(result.error.issues.map((issue) => issue.message).join(", "))
-  }
-
-  return result.data
-}
+export const PaginationQuerySchema = {
+  type: "object",
+  properties: {
+    page: { type: "number", minimum: 1, default: 1 },
+    limit: { type: "number", minimum: 1, maximum: 100, default: 20 },
+    search: { type: "string" },
+  },
+  additionalProperties: false,
+} as const
+export type PaginationQuery = FromSchema<typeof PaginationQuerySchema>

@@ -1,10 +1,21 @@
-import { z } from "zod"
+import { FromSchema } from "json-schema-to-ts"
 
-export const dailyReportQuerySchema = z.object({
-  date: z.coerce.date(),
-})
+export const DailyReportQuerySchema = {
+  type: "object",
+  properties: {
+    date: { type: "string", format: "date" },
+  },
+  required: ["date"],
+  additionalProperties: false,
+} as const
+export type DailyReportQuery = FromSchema<typeof DailyReportQuerySchema>
 
-export const ledgerQuerySchema = z.object({
-  from: z.coerce.date().optional(),
-  to: z.coerce.date().optional(),
-})
+export const LedgerQuerySchema = {
+  type: "object",
+  properties: {
+    from: { type: "string", format: "date" },
+    to: { type: "string", format: "date" },
+  },
+  additionalProperties: false,
+} as const
+export type LedgerQuery = FromSchema<typeof LedgerQuerySchema>

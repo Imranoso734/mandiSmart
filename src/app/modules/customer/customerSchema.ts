@@ -1,16 +1,33 @@
-import { z } from "zod"
-import { paginationSchema } from "../shared/schema"
+import { FromSchema } from "json-schema-to-ts"
+import { PaginationQuerySchema } from "../shared/schema"
 
-export const listCustomerQuerySchema = paginationSchema.extend({
-  isActive: z.coerce.boolean().optional(),
-})
+export const ListCustomerQuerySchema = {
+  type: "object",
+  properties: {
+    ...PaginationQuerySchema.properties,
+    isActive: { type: "boolean" },
+  },
+  additionalProperties: false,
+} as const
+export type ListCustomerQuery = FromSchema<typeof ListCustomerQuerySchema>
 
-export const createCustomerSchema = z.object({
-  name: z.string().trim().min(2),
-  phone: z.string().trim().optional(),
-  address: z.string().trim().optional(),
-  notes: z.string().trim().optional(),
-  isActive: z.boolean().optional().default(true),
-})
+export const CreateCustomerSchema = {
+  type: "object",
+  properties: {
+    name: { type: "string", minLength: 2 },
+    phone: { type: "string" },
+    address: { type: "string" },
+    notes: { type: "string" },
+    isActive: { type: "boolean", default: true },
+  },
+  required: ["name"],
+  additionalProperties: false,
+} as const
+export type CreateCustomer = FromSchema<typeof CreateCustomerSchema>
 
-export const updateCustomerSchema = createCustomerSchema.partial()
+export const UpdateCustomerSchema = {
+  type: "object",
+  properties: CreateCustomerSchema.properties,
+  additionalProperties: false,
+} as const
+export type UpdateCustomer = FromSchema<typeof UpdateCustomerSchema>

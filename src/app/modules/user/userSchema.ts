@@ -1,23 +1,41 @@
-import { UserRole } from "@prisma/client"
-import { z } from "zod"
-import { paginationSchema } from "../shared/schema"
+import { FromSchema } from "json-schema-to-ts"
+import { PaginationQuerySchema } from "../shared/schema"
 
-export const listUsersQuerySchema = paginationSchema.extend({
-  role: z.nativeEnum(UserRole).optional(),
-})
+const UserRoleEnum = ["OWNER", "OPERATOR"] as const
 
-export const createUserSchema = z.object({
-  name: z.string().trim().min(2),
-  email: z.string().email(),
-  phone: z.string().trim().optional(),
-  role: z.nativeEnum(UserRole).default(UserRole.OPERATOR),
-  password: z.string().min(8),
-})
+export const ListUsersQuerySchema = {
+  type: "object",
+  properties: {
+    ...PaginationQuerySchema.properties,
+    role: { type: "string", enum: UserRoleEnum },
+  },
+  additionalProperties: false,
+} as const
+export type ListUsersQuery = FromSchema<typeof ListUsersQuerySchema>
 
-export const updateUserSchema = z.object({
-  name: z.string().trim().min(2).optional(),
-  phone: z.string().trim().optional(),
-  role: z.nativeEnum(UserRole).optional(),
-  password: z.string().min(8).optional(),
-  isActive: z.boolean().optional(),
-})
+export const CreateUserSchema = {
+  type: "object",
+  properties: {
+    name: { type: "string", minLength: 2 },
+    email: { type: "string", format: "email" },
+    phone: { type: "string" },
+    role: { type: "string", enum: UserRoleEnum, default: "OPERATOR" },
+    password: { type: "string", minLength: 8 },
+  },
+  required: ["name", "email", "password"],
+  additionalProperties: false,
+} as const
+export type CreateUser = FromSchema<typeof CreateUserSchema>
+
+export const UpdateUserSchema = {
+  type: "object",
+  properties: {
+    name: { type: "string", minLength: 2 },
+    phone: { type: "string" },
+    role: { type: "string", enum: UserRoleEnum },
+    password: { type: "string", minLength: 8 },
+    isActive: { type: "boolean" },
+  },
+  additionalProperties: false,
+} as const
+export type UpdateUser = FromSchema<typeof UpdateUserSchema>
