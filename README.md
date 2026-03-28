@@ -1,20 +1,19 @@
-# Bin Management System Backend
+# MandiSmart Backend
 
-Backend API for the Bin Management System, built with Node.js, TypeScript, Fastify, Prisma, and PostgreSQL.
+MandiSmart ek multi-tenant Mandi Management aur Ledger SaaS backend hai jo Pakistan ki Urdu-speaking mandi market ke liye design kiya gaya hai. Ye system Arrti (owner) aur Mushi (operator) dono ke liye bana hai aur customer khata, supplier consignments, sales, payments, expenses, aur Urdu-friendly reporting ko manage karta hai.
 
-## What It Covers
+## Core Purpose
 
-- User authentication and password flows
-- Site and site-manager management
-- Logistics manager site assignments
-- Bin inventory management
-- Subcontractor and worker management
-- Allocation creation, listing, and bin returns
-- Asset uploads to S3
-- Analytics endpoints for dashboard data
-- Reporting endpoints, including PDF exports via Puppeteer
-- Branded email notifications for operational events
-- Audit trail APIs
+MandiSmart ka goal manual mandi register ko digital system mein convert karna hai.
+
+System in cheezon ko handle karta hai:
+- kisan ya supplier se aane wala truck / consignment record
+- customer ko maal ki sale entry
+- customer payment aur running khata
+- labour, vehicle rent, commission aur doosre expenses
+- consignment close hone par supplier settlement summary
+- daily sales aur ledger reporting
+- multi-tenant data isolation through `tenantId`
 
 ## Tech Stack
 
@@ -23,191 +22,347 @@ Backend API for the Bin Management System, built with Node.js, TypeScript, Fasti
 - Fastify
 - Prisma ORM
 - PostgreSQL
-- AWS S3
-- AWS SES / Resend-compatible email config
-- Puppeteer
+- Docker
+- JSON Schema + `json-schema-to-ts`
+
+## Multi-Tenant Design
+
+Har Arrti ka data alag tenant scope mein store hota hai.
+
+- shared database use hota hai
+- har business record `tenantId` ke through isolate hota hai
+- same phone number different tenants mein allowed hai
+- auth ke baad requests tenant context ke saath run hoti hain
 
 ## Roles
 
-### Admin
+### OWNER
 
-- Manage sites
-- Manage internal users
-- Access system-wide data
+- tenant create kar sakta hai
+- tenant profile update kar sakta hai
+- operators create/update/delete kar sakta hai
+- poora apna mandi data dekh sakta hai
+- reports aur settlement dekh sakta hai
 
-### Site Manager
+### OPERATOR
 
-- Manage bins, subcontractors, and site-level operations
-- View analytics and reports
-- Assign logistics managers to sites
+- customer, supplier, consignment, sale, payment, expense record kar sakta hai
+- field ya mandi floor par operational entries kar sakta hai
+- owner ke tenant scope ke andar kaam karta hai
 
-### Logistics Manager
-
-- Create allocations
-- Return bins fully or partially
-- Work within assigned sites only
-
-### Subcontractor
-
-- No login access
-- Receives communication through workers/email only
-
-## Main Modules
+## Main Business Modules
 
 - `auth`
-- `forgotPassword`
-- `password`
-- `user`
-- `site`
-- `siteManager`
-- `booking`
-- `assets`
-- `analytics`
-- `reportings`
-- `auditLog`
+- `tenant`
+- `users`
+- `customers`
+- `suppliers`
+- `consignments`
+- `sales`
+- `payments`
+- `expenses`
+- `reporting`
 
-## Email Notifications
+## Ledger Logic
 
-The system currently sends branded email notifications for:
+System ke andar customer khata simple ledger rule follow karta hai:
 
-- allocation approved
-- allocation return update
-- forgot password / password reset
-- logistics manager account creation
-- site assignment status updates
+- Sale = debit
+- Payment = credit
+- Running balance automatically calculate hota hai
+- Negative balance allow hai agar customer advance de
 
-Email templates use the same visual direction as PDF reports and include the project logo from `public/pBinLogo.png`.
+## Consignment Logic
 
-## Environment Variables
+- Supplier truck ke zariye maal bhejta hai
+- Ek consignment ke andar multiple items ho sakte hain
+- Har consignment `OPEN` ya `CLOSED` hota hai
+- Sale items consignment items ke against record hoti hain
+- Close ke waqt supplier settlement summary nikali ja sakti hai
 
-Copy `.env.example` to `.env` and fill in real values.
+## Expenses
 
-```env
-DATABASE_URI="postgresql://postgres:postgres@localhost:5432/bin_management?schema=public"
-JWT_SECRET="replace-with-a-long-random-secret"
+Supported expense types:
+- `LABOUR`
+- `VEHICLE_RENT`
+- `COMMISSION`
+- `OTHER`
 
-PORT=5000
-HOST=0.0.0.0
-FRONT_END_URL="http://localhost:3000/"
-PUBLIC_BASE_URL="http://localhost:5000"
-APP_TIMEZONE="Europe/London"
+Expenses optionally kisi specific consignment se link ho sakte hain.
 
-EMAIL_PROVIDER="ses"
-FROM_EMAIL="notifications@example.com"
-RESEND_EMAIL_API_KEY=""
+## Reports
 
-AWS_REGION="eu-west-2"
-AWS_ACCESS_KEY_ID=""
-AWS_SECRET_ACCESS_KEY=""
+Current reporting endpoints:
+- daily sales report
+- customer ledger report
+- consignment summary report
+- supplier settlement report
 
-AWS_IMAGE_BUCKET_NAME="your-image-bucket"
-AWS_IMAGE_BUCKET_REGION="eu-west-2"
+Reports API JSON return karti hai aur frontend ya print layer Urdu layout generate kar sakti hai.
 
-AWS_S3_BUCKET="your-generic-s3-bucket"
-PDF_BUCKET_URL=""
+## API Base URL
 
-ADMIN_EMAIL="admin@example.com"
-ADMIN_PASSWORD="ChangeMe123!"
-
-FAIREBASETOKEN=""
+```text
+/api/v1
 ```
 
-### Notes
+## Auth Flow
 
-- `AWS_IMAGE_BUCKET_NAME` and `AWS_IMAGE_BUCKET_REGION` are used for uploaded booking/assets files.
-- `AWS_S3_BUCKET` exists in config for generic storage usage.
-- `APP_TIMEZONE` affects reporting and date/time formatting.
-- PDF report generation uses Puppeteer and expects Chrome/Chromium availability in the runtime environment.
-- Email delivery uses the configured provider and `FROM_EMAIL`.
-- `PUBLIC_BASE_URL` is used to build absolute public asset URLs for emails, such as the logo image.
+### 1. Register Owner
 
-## Setup
+`POST /api/v1/auth/register-owner`
+
+Ye endpoint ek naya tenant aur us tenant ka owner user create karta hai.
+
+### 2. Login
+
+`POST /api/v1/auth/login`
+
+Ye tenant slug + email + password ke basis par token return karta hai.
+
+### 3. Authenticated Requests
+
+Protected endpoints par header bhejna hota hai:
+
+```text
+Authorization: Bearer <token>
+```
+
+## Quick API Overview
+
+### Health
+- `GET /api/v1/health-check`
+
+### Auth
+- `POST /api/v1/auth/register-owner`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/auth/me`
+
+### Tenant
+- `GET /api/v1/tenant/me`
+- `PATCH /api/v1/tenant/me`
+
+### Users
+- `GET /api/v1/users`
+- `GET /api/v1/users/:id`
+- `POST /api/v1/users`
+- `PUT /api/v1/users/:id`
+- `DELETE /api/v1/users/:id`
+
+### Customers
+- `GET /api/v1/customers`
+- `GET /api/v1/customers/:id`
+- `POST /api/v1/customers`
+- `PUT /api/v1/customers/:id`
+- `DELETE /api/v1/customers/:id`
+
+### Suppliers
+- `GET /api/v1/suppliers`
+- `GET /api/v1/suppliers/:id`
+- `POST /api/v1/suppliers`
+- `PUT /api/v1/suppliers/:id`
+- `DELETE /api/v1/suppliers/:id`
+
+### Consignments
+- `GET /api/v1/consignments`
+- `GET /api/v1/consignments/:id`
+- `POST /api/v1/consignments`
+- `PUT /api/v1/consignments/:id`
+- `DELETE /api/v1/consignments/:id`
+- `POST /api/v1/consignments/:id/close`
+
+### Sales
+- `GET /api/v1/sales`
+- `GET /api/v1/sales/:id`
+- `POST /api/v1/sales`
+- `PUT /api/v1/sales/:id`
+- `DELETE /api/v1/sales/:id`
+
+### Payments
+- `GET /api/v1/payments`
+- `GET /api/v1/payments/:id`
+- `POST /api/v1/payments`
+- `PUT /api/v1/payments/:id`
+- `DELETE /api/v1/payments/:id`
+
+### Expenses
+- `GET /api/v1/expenses`
+- `GET /api/v1/expenses/:id`
+- `POST /api/v1/expenses`
+- `PUT /api/v1/expenses/:id`
+- `DELETE /api/v1/expenses/:id`
+
+### Reports
+- `GET /api/v1/reports/daily-sales`
+- `GET /api/v1/reports/customer-ledger/:id`
+- `GET /api/v1/reports/consignment-summary/:id`
+- `GET /api/v1/reports/supplier-settlement/:id`
+
+## Example Request Payloads
+
+### Register Owner
+
+```json
+{
+  "tenantName": "MandiSmart Demo",
+  "tenantSlug": "mandismart-demo",
+  "tenantPhone": "03001234567",
+  "tenantAddress": "Sabzi Mandi Lahore",
+  "ownerName": "Imran",
+  "ownerEmail": "owner@example.com",
+  "ownerPhone": "03001234567",
+  "password": "StrongPass123"
+}
+```
+
+### Create Customer
+
+```json
+{
+  "name": "Sajid",
+  "phone": "03001112222",
+  "address": "Badami Bagh",
+  "notes": "Roz ka customer",
+  "isActive": true
+}
+```
+
+### Create Supplier
+
+```json
+{
+  "name": "Ahmad Kisan",
+  "phone": "03003334444",
+  "address": "Okara",
+  "notes": "Aloo supplier",
+  "isActive": true
+}
+```
+
+### Create Consignment
+
+```json
+{
+  "supplierId": 1,
+  "vehicleNumber": "LES-1234",
+  "driverName": "Rasheed",
+  "driverPhone": "03005556666",
+  "arrivalDate": "2026-03-25T05:30:00.000Z",
+  "notes": "Subah ka truck",
+  "commissionType": "PERCENTAGE",
+  "commissionValue": 6,
+  "items": [
+    {
+      "productNameUrdu": "آلو",
+      "productNameRoman": "Aloo",
+      "unit": "kg",
+      "quantityReceived": 1000,
+      "baseRate": 85
+    }
+  ]
+}
+```
+
+### Create Sale
+
+```json
+{
+  "customerId": 1,
+  "saleDate": "2026-03-25T09:00:00.000Z",
+  "notes": "Subah ki sale",
+  "items": [
+    {
+      "consignmentId": 1,
+      "consignmentItemId": 1,
+      "productNameUrdu": "آلو",
+      "quantity": 100,
+      "rate": 105
+    }
+  ]
+}
+```
+
+### Create Payment
+
+```json
+{
+  "customerId": 1,
+  "amount": 5000,
+  "paymentDate": "2026-03-25T11:00:00.000Z",
+  "method": "CASH",
+  "reference": "cash receipt",
+  "notes": "part payment"
+}
+```
+
+### Create Expense
+
+```json
+{
+  "consignmentId": 1,
+  "expenseType": "LABOUR",
+  "titleUrdu": "مزدوری",
+  "amount": 2500,
+  "expenseDate": "2026-03-25T12:00:00.000Z",
+  "notes": "truck utarai"
+}
+```
+## Environment Variables
+
+```env
+DATABASE_URI="postgresql://postgres:postgres@localhost:5433/mandismart?schema=public"
+JWT_SECRET="replace-with-a-long-random-secret"
+PORT=5000
+HOST=0.0.0.0
+```
+
+## Docker Database
+
+PostgreSQL Docker ke through run hota hai.
+
+```bash
+docker compose up -d db
+```
+
+Current local setup host port `5433` use karta hai.
+
+## Local Setup
 
 ```bash
 npm install
+npx prisma generate
+npx prisma migrate dev --name init
+npm run db:seed
+npm run build
 ```
 
-## Development
+## Run in Development
 
 ```bash
 npm run start:dev
 ```
-
-## Build
-
-```bash
-npm run build
-```
-
-## Production
-
-```bash
-npm run start:prod
-```
-
-## Useful Commands
-
-```bash
-npm run gen:secret
-npm run gen:types
-npm run db:migrate
-npm run db:seed
-npm run test
-npm run lint
-```
-
-## Reporting and PDF Exports
-
-Business reports are available under `/api/v1/reports`.
-
-Current PDF export endpoints include:
-
-- `/api/v1/reports/top-most-used-bins/export/pdf`
-- `/api/v1/reports/idle-bins/export/pdf`
-- `/api/v1/reports/logistics-manager-activity/export/pdf`
-- `/api/v1/reports/stuck-active-bookings/export/pdf`
-- `/api/v1/reports/repeat-subcontractor-demand/export/pdf`
-
-These endpoints return `application/pdf` and include a download filename through the `Content-Disposition` header.
-
-Current default filenames include:
-
-- `top-most-used-bins-report.pdf`
-- `idle-bins-report.pdf`
-- `logistics-manager-activity-report.pdf`
-- `stuck-active-bookings-report.pdf`
-- `repeat-subcontractor-demand-report.pdf`
-
-## Frontend Integration Note
-
-For Next.js or other frontend clients:
-
-- call the PDF endpoint with the bearer token
-- read the response as a `blob`
-- trigger download in the browser
-
-## Audit Trail Rules
-
-- Admin can view all audit logs.
-- Site managers can view only logs for their own managed sites.
-- Site-level admin actions are restricted from site-manager audit views.
-- Audit logs are written with site scope where applicable so each site sees only its own operational activity.
 
 ## Project Structure
 
 ```text
 src/
   app/
-    config/
     modules/
     routers.ts
   core/
     database/
-    email/
     helpers/
     server/
 prisma/
   schema.prisma
+postman/
 docker-compose.yml
-Dockerfile
+README.md
 ```
+
+## Documentation Files
+
+Detailed API explanation ke liye ye file bhi check karein:
+
+- `MANDISMART_API_DETAILS.txt`
+

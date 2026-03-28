@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client"
 import { db } from "@/core/database"
 import { NotFoundException } from "@/core/entities/exceptions"
-import { paginate } from "../shared/utils"
+import { decimalToNumber, paginate } from "../shared/utils"
 
 type CustomerPayload = {
   name?: string
@@ -29,7 +29,7 @@ export const CustomerService = {
         : {}),
     }
 
-    const [count, data] = await db.$transaction([
+    const [count, customers] = await db.$transaction([
       db.customer.count({ where }),
       db.customer.findMany({
         where,
@@ -37,6 +37,8 @@ export const CustomerService = {
         ...paginate(query.page, query.limit),
       }),
     ])
+
+    const data = await attachCustomerBalances(tenantId, customers)
 
     return { total: count, page: query.page, limit: query.limit, data }
   },
@@ -53,7 +55,8 @@ export const CustomerService = {
       throw NotFoundException("customer nahin mila")
     }
 
-    return customer
+    const [enrichedCustomer] = await attachCustomerBalances(tenantId, [customer])
+    return enrichedCustomer
   },
 
   /**
@@ -95,4 +98,55 @@ export const CustomerService = {
       data: { isActive: false },
     })
   },
+}
+
+async function attachCustomerBalances<T extends { id: number }>(tenantId: number, customers: T[]) {
+  if (!customers.length) {
+    return customers.map((customer) => ({
+      ...customer,
+      totalSales: 0,
+      totalPayments: 0,
+      balance: 0,
+    }))
+  }
+
+  const customerIds = customers.map((customer) => customer.id)
+
+  const [sales, payments] = await Promise.all([
+    db.sale.groupBy({
+      by: ["customerId"],
+      where: {
+        tenantId,
+        customerId: { in: customerIds },
+      },
+      _sum: {
+        totalAmount: true,
+      },
+    }),
+    db.payment.groupBy({
+      by: ["customerId"],
+      where: {
+        tenantId,
+        customerId: { in: customerIds },
+      },
+      _sum: {
+        amount: true,
+      },
+    }),
+  ])
+
+  const salesMap = new Map(sales.map((entry) => [entry.customerId, decimalToNumber(entry._sum.totalAmount)]))
+  const paymentsMap = new Map(payments.map((entry) => [entry.customerId, decimalToNumber(entry._sum.amount)]))
+
+  return customers.map((customer) => {
+    const totalSales = salesMap.get(customer.id) ?? 0
+    const totalPayments = paymentsMap.get(customer.id) ?? 0
+
+    return {
+      ...customer,
+      totalSales,
+      totalPayments,
+      balance: totalSales - totalPayments,
+    }
+  })
 }
