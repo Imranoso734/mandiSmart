@@ -1,7 +1,8 @@
 import { ExpenseType, Prisma } from "@prisma/client"
 import { db } from "@/core/database"
-import { NotFoundException } from "@/core/entities/exceptions"
-import { paginate } from "../shared/utils"
+import { BadRequestException, NotFoundException } from "@/core/entities/exceptions"
+import { decimalToNumber, paginate } from "../shared/utils"
+import { buildDerivedCommissionExpense } from "../shared/commission"
 
 type ExpensePayload = {
   consignmentId?: number
@@ -17,10 +18,12 @@ export const ExpenseService = {
    * Yahan tenant ke expenses list hote hain.
    */
   async list(tenantId: number, query: { page: number; limit: number; search?: string; consignmentId?: number; expenseType?: ExpensePayload["expenseType"] }) {
+    const requestingCommissionOnly = query.expenseType === ExpenseType.COMMISSION
     const where: Prisma.ExpenseWhereInput = {
       tenantId,
+      expenseType: requestingCommissionOnly ? undefined : { not: ExpenseType.COMMISSION },
       ...(query.consignmentId ? { consignmentId: query.consignmentId } : {}),
-      ...(query.expenseType ? { expenseType: query.expenseType } : {}),
+      ...(query.expenseType && !requestingCommissionOnly ? { expenseType: query.expenseType } : {}),
       ...(query.search
         ? {
             OR: [
@@ -31,19 +34,42 @@ export const ExpenseService = {
         : {}),
     }
 
-    const [count, data] = await db.$transaction([
-      db.expense.count({ where }),
-      db.expense.findMany({
-        where,
-        include: {
-          consignment: true,
-        },
-        orderBy: { expenseDate: "desc" },
-        ...paginate(query.page, query.limit),
-      }),
-    ])
+    const [count, storedExpenses] = requestingCommissionOnly
+      ? [0, []]
+      : await db.$transaction([
+          db.expense.count({ where }),
+          db.expense.findMany({
+            where,
+            include: {
+              consignment: true,
+            },
+            orderBy: { expenseDate: "desc" },
+            ...paginate(query.page, query.limit),
+          }),
+        ])
 
-    return { total: count, page: query.page, limit: query.limit, data }
+    const derivedCommissionExpenses = await buildCommissionExpenses({
+      tenantId,
+      consignmentId: query.consignmentId,
+      search: query.search,
+    })
+
+    const filteredDerivedCommissionExpenses = requestingCommissionOnly
+      ? derivedCommissionExpenses
+      : query.expenseType
+        ? derivedCommissionExpenses.filter((expense) => expense.expenseType === query.expenseType)
+        : derivedCommissionExpenses
+
+    const data = [...storedExpenses, ...filteredDerivedCommissionExpenses].sort(
+      (left, right) => right.expenseDate.getTime() - left.expenseDate.getTime(),
+    )
+
+    return {
+      total: count + filteredDerivedCommissionExpenses.length,
+      page: query.page,
+      limit: query.limit,
+      data,
+    }
   },
 
   /**
@@ -69,6 +95,9 @@ export const ExpenseService = {
     if (!payload.expenseType) {
       throw new Error("expenseType required hai")
     }
+    if (payload.expenseType === ExpenseType.COMMISSION) {
+      throw BadRequestException("کمیشن اب گاڑی کی فروخت سے خودکار طور پر نکلتا ہے")
+    }
     if (payload.consignmentId) {
       await ensureConsignment(tenantId, payload.consignmentId)
     }
@@ -92,7 +121,11 @@ export const ExpenseService = {
    * Yahan expense update hota hai.
    */
   async update(tenantId: number, id: number, payload: ExpensePayload) {
-    await this.getById(tenantId, id)
+    const existing = await this.getById(tenantId, id)
+
+    if (existing.expenseType === ExpenseType.COMMISSION || payload.expenseType === ExpenseType.COMMISSION) {
+      throw BadRequestException("کمیشن اب الگ خرچے کے طور پر edit نہیں ہو سکتا")
+    }
 
     if (payload.consignmentId) {
       await ensureConsignment(tenantId, payload.consignmentId)
@@ -119,4 +152,46 @@ async function ensureConsignment(tenantId: number, consignmentId: number): Promi
   if (!consignment) {
     throw NotFoundException("consignment nahin mili")
   }
+}
+
+async function buildCommissionExpenses({
+  tenantId,
+  consignmentId,
+  search,
+}: {
+  tenantId: number
+  consignmentId?: number
+  search?: string
+}) {
+  const consignments = await db.consignment.findMany({
+    where: {
+      tenantId,
+      ...(consignmentId ? { id: consignmentId } : {}),
+    },
+    select: {
+      id: true,
+      arrivalDate: true,
+      commissionValue: true,
+      saleItems: {
+        select: {
+          lineTotal: true,
+        },
+      },
+    },
+  })
+
+  return consignments
+    .map((consignment) => {
+      const grossSales = consignment.saleItems.reduce((sum, saleItem) => sum + decimalToNumber(saleItem.lineTotal), 0)
+      return buildDerivedCommissionExpense(consignment, grossSales)
+    })
+    .filter((expense): expense is NonNullable<typeof expense> => expense !== null)
+    .filter((expense) => {
+      if (!search) return true
+      const normalizedSearch = search.toLowerCase()
+      return (
+        expense.titleUrdu.toLowerCase().includes(normalizedSearch) ||
+        (expense.notes ?? "").toLowerCase().includes(normalizedSearch)
+      )
+    })
 }

@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client"
 import { db } from "@/core/database"
 import { NotFoundException } from "@/core/entities/exceptions"
 import { decimalToNumber, paginate } from "../shared/utils"
+import { normalizePhone, normalizePhoneSearch } from "../shared/phone"
 
 type CustomerPayload = {
   name?: string
@@ -16,6 +17,7 @@ export const CustomerService = {
    * Yahan tenant ke customers list hote hain.
    */
   async list(tenantId: number, query: { page: number; limit: number; search?: string; isActive?: boolean }) {
+    const phoneSearch = normalizePhoneSearch(query.search)
     const where: Prisma.CustomerWhereInput = {
       tenantId,
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
@@ -24,6 +26,7 @@ export const CustomerService = {
             OR: [
               { name: { contains: query.search, mode: "insensitive" } },
               { phone: { contains: query.search, mode: "insensitive" } },
+              ...(phoneSearch ? [{ phone: { contains: phoneSearch, mode: "insensitive" as const } }] : []),
             ],
           }
         : {}),
@@ -67,7 +70,7 @@ export const CustomerService = {
       data: {
         tenantId,
         name: payload.name || "",
-        phone: payload.phone,
+        phone: normalizePhone(payload.phone),
         address: payload.address,
         notes: payload.notes,
         isActive: payload.isActive ?? true,
@@ -83,7 +86,10 @@ export const CustomerService = {
 
     return db.customer.update({
       where: { id },
-      data: payload,
+      data: {
+        ...payload,
+        ...(payload.phone !== undefined ? { phone: normalizePhone(payload.phone) } : {}),
+      },
     })
   },
 

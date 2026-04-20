@@ -2,12 +2,14 @@ import { CommissionType, ConsignmentStatus, Prisma, SettlementStatus } from "@pr
 import { db } from "@/core/database"
 import { BadRequestException, NotFoundException } from "@/core/entities/exceptions"
 import { decimalToNumber, paginate } from "../shared/utils"
+import { calculateCommissionAmount, excludeManualCommissionExpenses } from "../shared/commission"
+import { normalizePhone } from "../shared/phone"
 
 type ConsignmentItemInput = {
   productNameUrdu: string
   productNameRoman?: string
   unit: string
-  quantityReceived: number
+  quantityReceived?: number
   baseRate?: number
 }
 
@@ -96,7 +98,7 @@ export const ConsignmentService = {
         supplierId: Number(payload.supplierId),
         vehicleNumber: payload.vehicleNumber || "",
         ...(payload.driverName !== undefined ? { driverName: payload.driverName } : {}),
-        ...(payload.driverPhone !== undefined ? { driverPhone: payload.driverPhone } : {}),
+        ...(payload.driverPhone !== undefined ? { driverPhone: normalizePhone(payload.driverPhone) } : {}),
         arrivalDate: payload.arrivalDate || new Date(),
         ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
         ...(payload.commissionType ? { commissionType: payload.commissionType } : {}),
@@ -107,7 +109,7 @@ export const ConsignmentService = {
             productNameUrdu: item.productNameUrdu,
             ...(item.productNameRoman !== undefined ? { productNameRoman: item.productNameRoman } : {}),
             unit: item.unit,
-            quantityReceived: item.quantityReceived,
+            ...(item.quantityReceived !== undefined ? { quantityReceived: item.quantityReceived } : {}),
             ...(item.baseRate !== undefined ? { baseRate: item.baseRate } : {}),
           })),
         },
@@ -158,7 +160,7 @@ export const ConsignmentService = {
           ...(payload.supplierId !== undefined ? { supplierId: payload.supplierId } : {}),
           ...(payload.vehicleNumber !== undefined ? { vehicleNumber: payload.vehicleNumber } : {}),
           ...(payload.driverName !== undefined ? { driverName: payload.driverName } : {}),
-          ...(payload.driverPhone !== undefined ? { driverPhone: payload.driverPhone } : {}),
+          ...(payload.driverPhone !== undefined ? { driverPhone: normalizePhone(payload.driverPhone) } : {}),
           ...(payload.arrivalDate !== undefined ? { arrivalDate: payload.arrivalDate } : {}),
           ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
           ...(payload.commissionType !== undefined ? { commissionType: payload.commissionType } : {}),
@@ -170,7 +172,7 @@ export const ConsignmentService = {
                     productNameUrdu: item.productNameUrdu,
                     ...(item.productNameRoman !== undefined ? { productNameRoman: item.productNameRoman } : {}),
                     unit: item.unit,
-                    quantityReceived: item.quantityReceived,
+                    ...(item.quantityReceived !== undefined ? { quantityReceived: item.quantityReceived } : {}),
                     ...(item.baseRate !== undefined ? { baseRate: item.baseRate } : {}),
                   })),
                 },
@@ -238,15 +240,10 @@ export const ConsignmentService = {
       return sum + itemSales
     }, 0)
 
-    const extraExpenseAmount = consignment.expenses.reduce(
-      (sum, expense) => sum + decimalToNumber(expense.amount),
-      0,
-    )
+    const manualExpenses = excludeManualCommissionExpenses(consignment.expenses)
+    const extraExpenseAmount = manualExpenses.reduce((sum, expense) => sum + decimalToNumber(expense.amount), 0)
 
-    const commissionAmount =
-      consignment.commissionType === CommissionType.PERCENTAGE
-        ? (grossSales * decimalToNumber(consignment.commissionValue)) / 100
-        : decimalToNumber(consignment.commissionValue)
+    const commissionAmount = calculateCommissionAmount(grossSales, consignment.commissionValue)
 
     const netPayable = grossSales - commissionAmount - extraExpenseAmount
     const amountPaid = consignment.settlement ? decimalToNumber(consignment.settlement.amountPaid) : 0

@@ -2,10 +2,17 @@ import { FastifyReply, FastifyRequest } from "fastify"
 import { requestMeta } from "@/core/helpers/requestMeta"
 import { IdParams } from "../shared/schema"
 import { toDateOnly } from "../shared/utils"
-import { DailyReportQuery, LedgerQuery } from "./reportSchema"
+import { DailyReportQuery, DashboardOverviewQuery, LedgerQuery } from "./reportSchema"
 import { ReportService } from "./reportService"
 
 export const ReportController = {
+  async dashboardOverview(req: FastifyRequest, reply: FastifyReply) {
+    const meta = requestMeta(req)
+    const query = req.query as DashboardOverviewQuery
+    const data = await ReportService.dashboardOverview(meta.tenantId, toDateOnly(query.date) as Date)
+    reply.send({ success: true, data })
+  },
+
   async dailySales(req: FastifyRequest, reply: FastifyReply) {
     const meta = requestMeta(req)
     const query = req.query as DailyReportQuery

@@ -7,6 +7,7 @@ import {
 import { Password } from "@/core/helpers/password"
 import { JWT } from "@/core/helpers/jwt"
 import { authConfig } from "@/app/config"
+import { normalizePhone } from "../shared/phone"
 import { slugify } from "../shared/utils"
 
 type RegisterOwnerInput = {
@@ -53,7 +54,7 @@ export const AuthService = {
         data: {
           name: payload.tenantName,
           slug: requestedSlug,
-          phone: payload.tenantPhone,
+          phone: normalizePhone(payload.tenantPhone),
           address: payload.tenantAddress,
           locale: "ur-PK",
           currency: "PKR",
@@ -65,7 +66,7 @@ export const AuthService = {
           tenantId: tenant.id,
           name: payload.ownerName,
           email: payload.ownerEmail.toLowerCase(),
-          phone: payload.ownerPhone,
+          phone: normalizePhone(payload.ownerPhone),
           role: UserRole.OWNER,
         },
         include: {

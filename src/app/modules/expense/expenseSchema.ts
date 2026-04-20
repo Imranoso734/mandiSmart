@@ -1,7 +1,7 @@
 import { FromSchema } from "json-schema-to-ts"
 import { PaginationQuerySchema } from "../shared/schema"
 
-const ExpenseTypeEnum = ["LABOUR", "VEHICLE_RENT", "COMMISSION", "OTHER"] as const
+const ExpenseTypeEnum = ["LABOUR", "VEHICLE_RENT", "OTHER"] as const
 
 export const ListExpenseQuerySchema = {
   type: "object",

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client"
 import { db } from "@/core/database"
 import { NotFoundException } from "@/core/entities/exceptions"
+import { normalizePhone, normalizePhoneSearch } from "../shared/phone"
 import { paginate } from "../shared/utils"
 
 type SupplierPayload = {
@@ -16,6 +17,7 @@ export const SupplierService = {
    * Yahan tenant ke suppliers list hote hain.
    */
   async list(tenantId: number, query: { page: number; limit: number; search?: string; isActive?: boolean }) {
+    const phoneSearch = normalizePhoneSearch(query.search)
     const where: Prisma.SupplierWhereInput = {
       tenantId,
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
@@ -24,6 +26,7 @@ export const SupplierService = {
             OR: [
               { name: { contains: query.search, mode: "insensitive" } },
               { phone: { contains: query.search, mode: "insensitive" } },
+              ...(phoneSearch ? [{ phone: { contains: phoneSearch, mode: "insensitive" as const } }] : []),
             ],
           }
         : {}),
@@ -64,7 +67,7 @@ export const SupplierService = {
       data: {
         tenantId,
         name: payload.name || "",
-        phone: payload.phone,
+        phone: normalizePhone(payload.phone),
         address: payload.address,
         notes: payload.notes,
         isActive: payload.isActive ?? true,
@@ -80,7 +83,10 @@ export const SupplierService = {
 
     return db.supplier.update({
       where: { id },
-      data: payload,
+      data: {
+        ...payload,
+        ...(payload.phone !== undefined ? { phone: normalizePhone(payload.phone) } : {}),
+      },
     })
   },
 

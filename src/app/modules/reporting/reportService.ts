@@ -1,13 +1,109 @@
 import { db } from "@/core/database"
 import { NotFoundException } from "@/core/entities/exceptions"
-import { dayRange, decimalToNumber } from "../shared/utils"
+import { dayRange, decimalToNumber, karachiDayRange } from "../shared/utils"
+import {
+  buildDerivedCommissionExpense,
+  excludeManualCommissionExpenses,
+} from "../shared/commission"
 
 export const ReportService = {
+  /**
+   * Yahan dashboard ke liye ek hi jagah se aaj ka summary milta hai.
+   */
+  async dashboardOverview(tenantId: number, date: Date) {
+    const { start, end } = karachiDayRange(date)
+
+    const [
+      sales,
+      payments,
+      storedExpenses,
+      openConsignments,
+      customers,
+    ] = await Promise.all([
+      db.sale.findMany({
+        where: {
+          tenantId,
+          saleDate: { gte: start, lte: end },
+        },
+        include: {
+          customer: true,
+          items: true,
+        },
+        orderBy: { saleDate: "desc" },
+      }),
+      db.payment.findMany({
+        where: {
+          tenantId,
+          paymentDate: { gte: start, lte: end },
+        },
+        include: {
+          customer: true,
+        },
+        orderBy: { paymentDate: "desc" },
+      }),
+      db.expense.findMany({
+        where: {
+          tenantId,
+          expenseType: { not: "COMMISSION" },
+          expenseDate: { gte: start, lte: end },
+        },
+        include: {
+          consignment: true,
+        },
+        orderBy: { expenseDate: "desc" },
+      }),
+      db.consignment.findMany({
+        where: {
+          tenantId,
+          status: "OPEN",
+        },
+        include: {
+          items: true,
+        },
+      }),
+      db.customer.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: "desc" },
+      }),
+    ])
+
+    const customerBalances = await attachCustomerBalances(tenantId, customers)
+    const topCustomers = customerBalances
+      .slice()
+      .sort((left, right) => (right.balance ?? 0) - (left.balance ?? 0))
+      .slice(0, 4)
+
+    const openConsignmentValue = openConsignments.reduce(
+      (sum, consignment) =>
+        sum + consignment.items.reduce((inner, item) => inner + decimalToNumber(item.baseRate), 0),
+      0,
+    )
+
+    return {
+      todaySalesAmount: sales.reduce((sum, sale) => sum + decimalToNumber(sale.totalAmount), 0),
+      todaySalesCount: sales.length,
+      activeConsignments: openConsignments.length,
+      recentPaymentsTotal: payments.reduce((sum, payment) => sum + decimalToNumber(payment.amount), 0),
+      recentExpensesTotal: storedExpenses.reduce((sum, expense) => sum + decimalToNumber(expense.amount), 0),
+      customerOutstandingTotal: customerBalances
+        .filter((customer) => (customer.balance ?? 0) > 0)
+        .reduce((sum, customer) => sum + Number(customer.balance ?? 0), 0),
+      customerAdvanceTotal: customerBalances
+        .filter((customer) => (customer.balance ?? 0) < 0)
+        .reduce((sum, customer) => sum + Math.abs(Number(customer.balance ?? 0)), 0),
+      openConsignmentValue,
+      recentSales: sales.slice(0, 4).map((sale) => mapSale(sale)),
+      recentPayments: payments.slice(0, 4).map((payment) => mapPayment(payment)),
+      recentExpenses: storedExpenses.slice(0, 4).map((expense) => mapExpense(expense)),
+      topCustomers: customerBalancesToApi(topCustomers),
+    }
+  },
+
   /**
    * Yahan rozana ki sales aur collections Urdu labels ke saath milti hain.
    */
   async dailySales(tenantId: number, date: Date) {
-    const { start, end } = dayRange(date)
+    const { start, end } = karachiDayRange(date)
 
     const sales = await db.sale.findMany({
       where: {
@@ -46,18 +142,24 @@ export const ReportService = {
       throw NotFoundException("customer nahin mila")
     }
 
+    const fromRange = from ? karachiDayRange(from).start : undefined
+    const toRange = to ? karachiDayRange(to).end : undefined
+
     const sales = await db.sale.findMany({
       where: {
         tenantId,
         customerId,
-        ...(from || to
+        ...(fromRange || toRange
           ? {
               saleDate: {
-                ...(from ? { gte: from } : {}),
-                ...(to ? { lte: to } : {}),
+                ...(fromRange ? { gte: fromRange } : {}),
+                ...(toRange ? { lte: toRange } : {}),
               },
             }
           : {}),
+      },
+      include: {
+        items: true,
       },
       orderBy: { saleDate: "asc" },
     })
@@ -66,11 +168,11 @@ export const ReportService = {
       where: {
         tenantId,
         customerId,
-        ...(from || to
+        ...(fromRange || toRange
           ? {
               paymentDate: {
-                ...(from ? { gte: from } : {}),
-                ...(to ? { lte: to } : {}),
+                ...(fromRange ? { gte: fromRange } : {}),
+                ...(toRange ? { lte: toRange } : {}),
               },
             }
           : {}),
@@ -86,10 +188,11 @@ export const ReportService = {
         id: `sale-${sale.id}`,
         date: sale.saleDate,
         type: "SALE" as const,
-        description: `سیل ${sale.invoiceNumber}`,
+        description: saleItemDescription(sale),
         debit: decimalToNumber(sale.totalAmount),
         credit: 0,
         reference: sale.invoiceNumber,
+        itemNames: uniqueSaleItemNames(sale),
       })),
       ...payments.map((payment) => ({
         id: `payment-${payment.id}`,
@@ -174,18 +277,25 @@ export const ReportService = {
 
     const mappedSales = sales.map((sale) => mapSale(sale, true))
     const totalSales = mappedSales.reduce((sum, sale) => sum + sale.totalAmount, 0)
-    const totalExpenses = consignment.expenses.reduce((sum, expense) => sum + decimalToNumber(expense.amount), 0)
+    const manualExpenses = excludeManualCommissionExpenses(consignment.expenses)
+    const derivedCommissionExpense = buildDerivedCommissionExpense(consignment, totalSales)
+    const mappedExpenses = [
+      ...manualExpenses.map(mapExpense),
+      ...(derivedCommissionExpense ? [mapExpense(derivedCommissionExpense)] : []),
+    ]
+    const totalExpenses = mappedExpenses.reduce((sum, expense) => sum + expense.amount, 0)
     const totalItemsSold = consignment.items.reduce(
       (sum, item) => sum + item.saleItems.reduce((inner, saleItem) => inner + decimalToNumber(saleItem.quantity), 0),
       0,
     )
-    const totalItemsRemaining = consignment.items.reduce(
-      (sum, item) =>
-        sum +
-        (decimalToNumber(item.quantityReceived) -
-          item.saleItems.reduce((inner, saleItem) => inner + decimalToNumber(saleItem.quantity), 0)),
-      0,
-    )
+    const hasUnknownRemaining = consignment.items.some((item) => item.quantityReceived === null)
+    const totalItemsRemaining = hasUnknownRemaining
+      ? null
+      : consignment.items.reduce((sum, item) => {
+          const quantityReceived = decimalToNumber(item.quantityReceived)
+          const quantitySold = item.saleItems.reduce((inner, saleItem) => inner + decimalToNumber(saleItem.quantity), 0)
+          return sum + (quantityReceived - quantitySold)
+        }, 0)
 
     return {
       consignment: {
@@ -202,16 +312,17 @@ export const ReportService = {
         status: consignment.status,
         items: consignment.items.map((item) => {
           const quantitySold = item.saleItems.reduce((sum, saleItem) => sum + decimalToNumber(saleItem.quantity), 0)
+          const quantityReceived = item.quantityReceived === null ? null : decimalToNumber(item.quantityReceived)
           return {
             id: item.id,
             consignmentId: item.consignmentId,
             productNameUrdu: item.productNameUrdu,
             productNameRoman: item.productNameRoman,
             unit: item.unit,
-            quantityReceived: decimalToNumber(item.quantityReceived),
+            quantityReceived,
             baseRate: item.baseRate === null ? null : decimalToNumber(item.baseRate),
             quantitySold,
-            remainingQuantity: decimalToNumber(item.quantityReceived) - quantitySold,
+            remainingQuantity: quantityReceived === null ? null : quantityReceived - quantitySold,
           }
         }),
       },
@@ -220,7 +331,7 @@ export const ReportService = {
       totalItemsSold,
       totalItemsRemaining,
       sales: mappedSales,
-      expenses: consignment.expenses.map(mapExpense),
+      expenses: mappedExpenses,
     }
   },
 
@@ -265,7 +376,7 @@ export const ReportService = {
           productNameUrdu: item.productNameUrdu,
           productNameRoman: item.productNameRoman,
           unit: item.unit,
-          quantityReceived: decimalToNumber(item.quantityReceived),
+          quantityReceived: item.quantityReceived === null ? null : decimalToNumber(item.quantityReceived),
           baseRate: item.baseRate === null ? null : decimalToNumber(item.baseRate),
         })),
       },
@@ -282,6 +393,24 @@ export const ReportService = {
 function toNumeric(value: { toString(): string } | number | null | undefined) {
   if (value === null || value === undefined) return 0
   return typeof value === "number" ? value : Number(value.toString())
+}
+
+function uniqueSaleItemNames(sale: { items?: Array<{ productNameUrdu?: string | null }> }) {
+  const names = (sale.items ?? [])
+    .map((item) => item.productNameUrdu?.trim())
+    .filter((name): name is string => Boolean(name))
+
+  return Array.from(new Set(names))
+}
+
+function saleItemDescription(sale: { invoiceNumber: string; items?: Array<{ productNameUrdu?: string | null }> }) {
+  const names = uniqueSaleItemNames(sale)
+  if (!names.length) return "سیل"
+
+  const visibleNames = names.slice(0, 3).join(" - ")
+  const hiddenCount = names.length - 3
+
+  return hiddenCount > 0 ? `سیل - ${visibleNames} - +${hiddenCount}` : `سیل - ${visibleNames}`
 }
 
 function mapSale(sale: {
@@ -359,4 +488,125 @@ function mapExpense(expense: {
     createdAt: expense.createdAt,
     updatedAt: expense.updatedAt,
   }
+}
+
+function mapPayment(payment: {
+  id: number
+  customerId: number
+  amount: { toString(): string } | number
+  paymentDate: Date
+  method: string
+  reference: string | null
+  notes: string | null
+  createdAt?: Date
+  updatedAt?: Date
+  customer?: {
+    id: number
+    name: string
+    phone: string | null
+    address?: string | null
+    notes?: string | null
+    isActive?: boolean
+  } | null
+}) {
+  return {
+    id: payment.id,
+    customerId: payment.customerId,
+    customer: payment.customer ?? undefined,
+    amount: toNumeric(payment.amount),
+    paymentDate: payment.paymentDate,
+    method: payment.method,
+    reference: payment.reference,
+    notes: payment.notes,
+    createdAt: payment.createdAt,
+    updatedAt: payment.updatedAt,
+  }
+}
+
+async function attachCustomerBalances<T extends {
+  id: number
+  name: string
+  phone: string | null
+  address?: string | null
+  notes?: string | null
+  isActive?: boolean
+  createdAt?: Date
+  updatedAt?: Date
+}>(tenantId: number, customers: T[]) {
+  if (!customers.length) {
+    return customers.map((customer) => ({
+      ...customer,
+      totalSales: 0,
+      totalPayments: 0,
+      balance: 0,
+    }))
+  }
+
+  const customerIds = customers.map((customer) => customer.id)
+
+  const [sales, payments] = await Promise.all([
+    db.sale.groupBy({
+      by: ["customerId"],
+      where: {
+        tenantId,
+        customerId: { in: customerIds },
+      },
+      _sum: {
+        totalAmount: true,
+      },
+    }),
+    db.payment.groupBy({
+      by: ["customerId"],
+      where: {
+        tenantId,
+        customerId: { in: customerIds },
+      },
+      _sum: {
+        amount: true,
+      },
+    }),
+  ])
+
+  const salesMap = new Map(sales.map((entry) => [entry.customerId, decimalToNumber(entry._sum.totalAmount)]))
+  const paymentsMap = new Map(payments.map((entry) => [entry.customerId, decimalToNumber(entry._sum.amount)]))
+
+  return customers.map((customer) => {
+    const totalSales = salesMap.get(customer.id) ?? 0
+    const totalPayments = paymentsMap.get(customer.id) ?? 0
+
+    return {
+      ...customer,
+      totalSales,
+      totalPayments,
+      balance: totalSales - totalPayments,
+    }
+  })
+}
+
+function customerBalancesToApi<T extends {
+  id: number
+  name: string
+  phone: string | null
+  address?: string | null
+  notes?: string | null
+  isActive?: boolean
+  createdAt?: Date
+  updatedAt?: Date
+  totalSales: number
+  totalPayments: number
+  balance: number
+}>(customers: T[]) {
+  return customers.map((customer) => ({
+    id: customer.id,
+    name: customer.name,
+    phone: customer.phone,
+    address: customer.address,
+    notes: customer.notes,
+    isActive: customer.isActive ?? true,
+    createdAt: customer.createdAt,
+    updatedAt: customer.updatedAt,
+    totalSales: customer.totalSales,
+    totalPayments: customer.totalPayments,
+    balance: customer.balance,
+  }))
 }

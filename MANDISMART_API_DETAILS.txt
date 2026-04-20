@@ -702,3 +702,258 @@ Local Docker host port:
 ====================================================================
 
 Ye documentation current active backend routes ke mutabiq likhi gayi hai. Agar future mein new endpoints add hon, to README aur is file ko bhi update karna chahiye.
+
+
+
+===============================================================================================================================
+
+Optimizing tool selection...Project test scope nikalne ke liye backend routes aur frontend screens ko dekh raha hoon.
+
+Searched for regex `GET /api/v1|POST /api/v1|PUT /api/v1|DELETE /api/v1|routers` (`**/MandiSmart-BackEnd/**`), 105 results
+
+Searched for regex `page.tsx|router.*|route.*|/dashboard/|auth/|reports/` (`**/MandiSmart-FronEnd/app/**`), no results
+
+## Test cases for `MandiSmart` project
+
+Ye manual test cases backend + frontend dono ke liye hain, taake aap khud poora workflow check kar sako.
+
+---
+
+## 1) Backend API test cases
+
+### A) Auth / tenant
+1. `POST /api/v1/auth/register-owner`
+   - valid data se owner + tenant create ho
+   - response mein tenant slug, owner user id, token aaye
+2. `POST /api/v1/auth/login`
+   - valid tenant slug + email + password se token mile
+   - invalid password ya wrong slug par 401 error aaye
+3. `GET /api/v1/auth/me`
+   - valid token se current user detail mile
+   - missing/expired token par unauthorized aaye
+4. `GET /api/v1/tenant/me`
+   - owner token se tenant data mile
+5. `PATCH /api/v1/tenant/me`
+   - tenant name/address update ho
+   - invalid field par validation error aaye
+
+### B) Users
+6. `GET /api/v1/users`
+   - tenant ke sare users list ho
+7. `POST /api/v1/users`
+   - new operator add ho
+   - duplicate email ya invalid role par error aaye
+8. `GET /api/v1/users/:id`
+   - existing user detail mile
+   - invalid id par 404 aaye
+9. `PUT /api/v1/users/:id`
+   - user data update ho
+10. `DELETE /api/v1/users/:id`
+    - operator delete ho
+    - owner ko delete karne ki permission check karein (should be blocked if business logic restricts)
+
+### C) Customers
+11. `GET /api/v1/customers`
+    - list of customers return kare
+12. `POST /api/v1/customers`
+    - naya customer create ho
+    - required fields missing par error
+13. `GET /api/v1/customers/:id`
+14. `PUT /api/v1/customers/:id`
+    - customer details update ho
+15. `DELETE /api/v1/customers/:id`
+    - customer delete ho
+    - deleted customer se sale create karne ki permission fail ho
+
+### D) Suppliers
+16. `GET /api/v1/suppliers`
+17. `POST /api/v1/suppliers`
+    - naya supplier create
+18. `GET /api/v1/suppliers/:id`
+19. `PUT /api/v1/suppliers/:id`
+20. `DELETE /api/v1/suppliers/:id`
+    - supplier delete karne par linked consignments ka behavior check karein
+
+### E) Consignments
+21. `GET /api/v1/consignments`
+22. `POST /api/v1/consignments`
+    - supplier, vehicle, items, commission type/value set ho
+    - default status `OPEN` ho
+23. `GET /api/v1/consignments/:id`
+24. `PUT /api/v1/consignments/:id`
+    - consignment update ho
+25. `DELETE /api/v1/consignments/:id`
+26. `POST /api/v1/consignments/:id/close`
+    - open consignment close ho
+    - already closed consignment ko dobara close karne par error ho
+
+### F) Sales
+27. `GET /api/v1/sales`
+28. `POST /api/v1/sales`
+    - sale customer + consignment item se linked ho
+    - sale create hone par customer ledger debit ho
+29. `GET /api/v1/sales/:id`
+30. `PUT /api/v1/sales/:id`
+31. `DELETE /api/v1/sales/:id`
+    - sale delete hone par ledger rollback check karein
+
+### G) Payments
+32. `GET /api/v1/payments`
+33. `POST /api/v1/payments`
+    - payment create ho
+    - customer balance credit ho
+34. `GET /api/v1/payments/:id`
+35. `PUT /api/v1/payments/:id`
+36. `DELETE /api/v1/payments/:id`
+
+### H) Expenses
+37. `GET /api/v1/expenses`
+38. `POST /api/v1/expenses`
+    - labour, vehicle rent, commission, other types support ho
+    - optional `consignmentId` link karein
+39. `GET /api/v1/expenses/:id`
+40. `PUT /api/v1/expenses/:id`
+41. `DELETE /api/v1/expenses/:id`
+
+### I) Reports
+42. `GET /api/v1/reports/daily-sales`
+    - same date ke sales summary aaye
+43. `GET /api/v1/reports/customer-ledger/:id`
+    - customer ki sale/payment history + running balance aaye
+44. `GET /api/v1/reports/consignment-summary/:id`
+    - consignment ke sale details + item summary aaye
+45. `GET /api/v1/reports/supplier-settlement/:id`
+    - supplier settlement calculate ho
+    - gross sale, commission, linked expenses, payable amount sahi aaye
+
+### J) Multi-tenant / security
+46. same customer/supplier data doosre tenant se visible na ho
+47. tenant A ka token se tenant B ki resource access fail ho
+48. invalid JWT / expired token par sab protected routes 401 aaye
+49. owner-only reports/pages operator token se restrict ho
+
+---
+
+## 2) Frontend test cases
+
+### A) Auth / layout
+1. Login page aç with tenant slug + email + password
+2. Wrong credentials par error dikhaye
+3. successful login par dashboard route load ho
+4. logout se session clear ho aur login page wapas aaye
+5. auth token session/local storage mein save ho
+6. protected dashboard routes direct URL se access karne par login page par redirect ho
+
+### B) Dashboard / navigation
+7. dashboard page open ho aur summary cards dikhayen
+8. navigation menu se `گاہک`, `سپلائر`, `گاڑی`, `فروخت`, `ادائیگیاں`, `اخراجات`, `رپورٹس` navigate ho
+9. dark/light theme toggle kaam kare
+
+### C) Customers page
+10. customer list show ho
+11. naya customer add form work kare
+12. edit customer form work kare
+13. customer details page open ho
+14. customer delete UI test kare
+15. ledger balance is displayed correct
+
+### D) Suppliers page
+16. supplier list show ho
+17. new supplier add ho
+18. supplier edit ho
+19. supplier detail page load ho
+20. supplier delete work kare
+
+### E) Consignments page
+21. existing consignments list show ho
+22. new consignment form complete kare
+23. consignment items add/update kare
+24. consignment close button kaam kare
+25. closed consignment details correct ho
+26. open/closed status UI visible ho
+
+### F) Sales page
+27. sales list show ho
+28. new sale form open ho
+29. sale customer + items select ho
+30. sale create kare aur response show kare
+31. sale edit / delete buttons work kare
+
+### G) Payments page
+32. payment list show ho
+33. new payment entry add kare
+34. payment edit / delete kaam kare
+35. customer balance update visible ho agar ledger page available ho
+
+### H) Expenses page
+36. expense list show ho
+37. naya expense add kare
+38. different expense types choose kare
+39. expense link to consignment kare
+40. edit / delete expense
+
+### I) Reports page
+41. daily sales report load kare
+42. customer ledger report load kare
+43. consignment summary report load kare
+44. supplier settlement report load kare
+45. report filters / date selection work kare
+46. report values Urdu layout mein sahi dikhayen
+
+### J) UI / localization
+47. page RTL layout sahi ho
+48. Urdu labels / buttons visible hon
+49. form validation messages Urdu ya clear hon
+50. mobile/responsive view check kare
+
+---
+
+## 3) End-to-end business flow
+
+Ye flows poore system ko cross-check karte hain:
+
+### Flow 1: supplier -> consignment -> sale -> payment
+- supplier create karo
+- consignment create karo
+- customer create karo
+- sale create karo consignment item ke against
+- payment create karo customer ke liye
+- customer ledger report verify karo
+- sale + payment balance expected ho
+
+### Flow 2: expense + settlement
+- consignment pe expense add karo
+- commission type/value set karo
+- consignment close karo
+- supplier settlement report dekho
+- commission + expense deduction aur payable amount verify karo
+
+### Flow 3: tenant isolation
+- tenant A create karo owner+data
+- tenant B create karo owner+data
+- tenant A ke token se tenant B data access fail ho
+- same phone/email alag tenant par allowed hona chahiye
+
+---
+
+## 4) Manual test checklist format
+
+Aap in test cases ko aise likh sakte hain:
+
+- Test case: `POST /api/v1/customers` valid input
+  - Steps: `1. token le, 2. payload bheje, 3. response check kare`
+  - Expected: status `201`, customer id return ho, `tenantId` same ho
+- Test case: `GET /api/v1/reports/customer-ledger/:id`
+  - Steps: create sale + payment, then report
+  - Expected: debit/credit balance sahi ho
+
+---
+
+## 5) Priority ke hisaab se start karen
+
+- sabse pehle: auth + tenant + protected route
+- phir: customer, supplier, consignment create
+- phir: sale/payment/expense and ledger
+- aakhir mein: reports + multi-tenant security + frontend UX
+
+Agar aap chahein to main inko ek spreadsheet-style table ya Postman collection format mein bhi convert kar sakta hoon.

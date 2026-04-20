@@ -225,11 +225,13 @@ async function validateSaleItems(tenantId: number, items: SaleItemInput[], curre
       },
     })
 
-    const soldQuantity = decimalToNumber(aggregate._sum.quantity)
-    const availableQuantity = decimalToNumber(consignmentItem.quantityReceived) - soldQuantity
+    if (consignmentItem.quantityReceived !== null) {
+      const soldQuantity = decimalToNumber(aggregate._sum.quantity)
+      const availableQuantity = decimalToNumber(consignmentItem.quantityReceived) - soldQuantity
 
-    if (item.quantity > availableQuantity) {
-      throw BadRequestException(`item ${item.productNameUrdu} ki available quantity kam hai`)
+      if (item.quantity > availableQuantity) {
+        throw BadRequestException(`item ${item.productNameUrdu} ki available quantity kam hai`)
+      }
     }
   }
 }

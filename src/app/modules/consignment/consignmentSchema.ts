@@ -1,19 +1,20 @@
 import { FromSchema } from "json-schema-to-ts"
 import { PaginationQuerySchema } from "../shared/schema"
+import { OPTIONAL_PHONE_INPUT_PATTERN } from "../shared/phone"
 
 const ConsignmentStatusEnum = ["OPEN", "CLOSED"] as const
-const CommissionTypeEnum = ["PERCENTAGE", "FIXED"] as const
+const CommissionTypeEnum = ["PERCENTAGE"] as const
 
 const ConsignmentItemSchema = {
   type: "object",
   properties: {
     productNameUrdu: { type: "string", minLength: 1 },
     productNameRoman: { type: "string" },
-    unit: { type: "string", minLength: 1, default: "kg" },
+    unit: { type: "string", minLength: 1, default: "کلو" },
     quantityReceived: { type: "number", exclusiveMinimum: 0 },
     baseRate: { type: "number", minimum: 0 },
   },
-  required: ["productNameUrdu", "quantityReceived"],
+  required: ["productNameUrdu"],
   additionalProperties: false,
 } as const
 export type ConsignmentItem = FromSchema<typeof ConsignmentItemSchema>
@@ -35,7 +36,7 @@ export const CreateConsignmentSchema = {
     supplierId: { type: "number" },
     vehicleNumber: { type: "string", minLength: 2 },
     driverName: { type: "string" },
-    driverPhone: { type: "string" },
+    driverPhone: { type: "string", pattern: OPTIONAL_PHONE_INPUT_PATTERN },
     arrivalDate: { type: "string", format: "date-time" },
     notes: { type: "string" },
     commissionType: { type: "string", enum: CommissionTypeEnum, default: "PERCENTAGE" },

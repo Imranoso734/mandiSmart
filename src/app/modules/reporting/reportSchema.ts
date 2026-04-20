@@ -10,6 +10,9 @@ export const DailyReportQuerySchema = {
 } as const
 export type DailyReportQuery = FromSchema<typeof DailyReportQuerySchema>
 
+export const DashboardOverviewQuerySchema = DailyReportQuerySchema
+export type DashboardOverviewQuery = FromSchema<typeof DashboardOverviewQuerySchema>
+
 export const LedgerQuerySchema = {
   type: "object",
   properties: {

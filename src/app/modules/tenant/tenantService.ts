@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client"
 import { db } from "@/core/database"
 import { NotFoundException } from "@/core/entities/exceptions"
+import { normalizePhone } from "../shared/phone"
 
 export const TenantService = {
   /**
@@ -37,9 +38,14 @@ export const TenantService = {
       throw NotFoundException("tenant nahin mila")
     }
 
+    const data: Prisma.TenantUpdateInput = {
+      ...payload,
+      ...(typeof payload.phone === "string" ? { phone: normalizePhone(payload.phone) } : {}),
+    }
+
     return db.tenant.update({
       where: { id: tenantId },
-      data: payload,
+      data,
     })
   },
 }

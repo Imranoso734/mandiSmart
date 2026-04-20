@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: "dms_backend",
+      name: "MandiSmart-BackEnd",
       instances: 0,
       exec_mode: "cluster",
       script: "./build/index.js"

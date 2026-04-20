@@ -2,9 +2,10 @@ import { FastifyPlugin } from "@/core/server/plugins"
 import { authenticate } from "@/core/server/middleware/authenticate"
 import { IdParamsSchema } from "../shared/schema"
 import { ReportController } from "./reportController"
-import { DailyReportQuerySchema, LedgerQuerySchema } from "./reportSchema"
+import { DailyReportQuerySchema, DashboardOverviewQuerySchema, LedgerQuerySchema } from "./reportSchema"
 
 export const ReportRouter: FastifyPlugin = (app, _opts, next) => {
+  app.get("/dashboard-overview", { preHandler: [authenticate], schema: { querystring: DashboardOverviewQuerySchema } }, ReportController.dashboardOverview)
   app.get("/daily-sales", { preHandler: [authenticate], schema: { querystring: DailyReportQuerySchema } }, ReportController.dailySales)
   app.get("/customer-ledger/:id", { preHandler: [authenticate], schema: { params: IdParamsSchema, querystring: LedgerQuerySchema } }, ReportController.customerLedger)
   app.get("/consignment-summary/:id", { preHandler: [authenticate], schema: { params: IdParamsSchema } }, ReportController.consignmentSummary)

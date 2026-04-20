@@ -1,5 +1,6 @@
 import { FromSchema } from "json-schema-to-ts"
 import { PaginationQuerySchema } from "../shared/schema"
+import { OPTIONAL_PHONE_INPUT_PATTERN } from "../shared/phone"
 
 const UserRoleEnum = ["OWNER", "OPERATOR"] as const
 
@@ -18,7 +19,7 @@ export const CreateUserSchema = {
   properties: {
     name: { type: "string", minLength: 2 },
     email: { type: "string", format: "email" },
-    phone: { type: "string" },
+    phone: { type: "string", pattern: OPTIONAL_PHONE_INPUT_PATTERN },
     role: { type: "string", enum: UserRoleEnum, default: "OPERATOR" },
     password: { type: "string", minLength: 8 },
   },
@@ -31,7 +32,7 @@ export const UpdateUserSchema = {
   type: "object",
   properties: {
     name: { type: "string", minLength: 2 },
-    phone: { type: "string" },
+    phone: { type: "string", pattern: OPTIONAL_PHONE_INPUT_PATTERN },
     role: { type: "string", enum: UserRoleEnum },
     password: { type: "string", minLength: 8 },
     isActive: { type: "boolean" },

@@ -1,15 +1,16 @@
 import { FromSchema } from "json-schema-to-ts"
+import { OPTIONAL_PHONE_INPUT_PATTERN } from "../shared/phone"
 
 export const RegisterOwnerSchema = {
   type: "object",
   properties: {
     tenantName: { type: "string", minLength: 2 },
     tenantSlug: { type: "string", minLength: 2 },
-    tenantPhone: { type: "string" },
+    tenantPhone: { type: "string", pattern: OPTIONAL_PHONE_INPUT_PATTERN },
     tenantAddress: { type: "string" },
     ownerName: { type: "string", minLength: 2 },
     ownerEmail: { type: "string", format: "email" },
-    ownerPhone: { type: "string" },
+    ownerPhone: { type: "string", pattern: OPTIONAL_PHONE_INPUT_PATTERN },
     password: { type: "string", minLength: 8 },
   },
   required: ["tenantName", "ownerName", "ownerEmail", "password"],

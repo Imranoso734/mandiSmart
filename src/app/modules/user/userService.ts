@@ -2,6 +2,7 @@ import { Prisma, UserRole } from "@prisma/client"
 import { db } from "@/core/database"
 import { BadRequestException, NotFoundException } from "@/core/entities/exceptions"
 import { Password } from "@/core/helpers/password"
+import { normalizePhone, normalizePhoneSearch } from "../shared/phone"
 import { paginate } from "../shared/utils"
 
 type ListUsersQuery = {
@@ -28,6 +29,7 @@ export const UserService = {
    * Yahan tenant ke tamam users list hote hain.
    */
   async list(tenantId: number, query: ListUsersQuery) {
+    const phoneSearch = normalizePhoneSearch(query.search)
     const where: Prisma.UserWhereInput = {
       tenantId,
       ...(query.role ? { role: query.role } : {}),
@@ -37,6 +39,7 @@ export const UserService = {
               { name: { contains: query.search, mode: "insensitive" } },
               { email: { contains: query.search, mode: "insensitive" } },
               { phone: { contains: query.search, mode: "insensitive" } },
+              ...(phoneSearch ? [{ phone: { contains: phoneSearch, mode: "insensitive" as const } }] : []),
             ],
           }
         : {}),
@@ -100,7 +103,7 @@ export const UserService = {
           createdById,
           name: payload.name,
           email: payload.email.toLowerCase(),
-          phone: payload.phone,
+          phone: normalizePhone(payload.phone),
           role: payload.role,
         },
       })
@@ -127,7 +130,7 @@ export const UserService = {
 
     const data: Prisma.UserUpdateInput = {
       ...(payload.name !== undefined ? { name: payload.name } : {}),
-      ...(payload.phone !== undefined ? { phone: payload.phone } : {}),
+      ...(payload.phone !== undefined ? { phone: normalizePhone(payload.phone) } : {}),
       ...(payload.role !== undefined ? { role: payload.role } : {}),
       ...(payload.isActive !== undefined ? { isActive: payload.isActive } : {}),
     }
