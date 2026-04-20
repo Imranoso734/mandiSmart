@@ -1,11 +1,32 @@
+# dependencies
 node_modules/
+
+# build output
 build/
-*.old
+dist/
+coverage/
+
+# local env files
 .env
+.env*.local
 .env.prod
-prisma/migrations/*
+!.env.example
+
+# logs and temporary files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.old
+.DS_Store
+Thumbs.db
+
+# local databases / generated files
 prisma/*.db
 prisma/*.db-journal
-docker-volume
+docker-volume/
 public/generated-reports/
-postman
+
+# local tooling exports
+postman/
