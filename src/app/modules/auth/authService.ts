@@ -3,12 +3,15 @@ import { db } from "@/core/database"
 import {
   AuthException,
   BadRequestException,
+  NotFoundException,
 } from "@/core/entities/exceptions"
 import { Password } from "@/core/helpers/password"
 import { JWT } from "@/core/helpers/jwt"
 import { authConfig } from "@/app/config"
 import { normalizePhone } from "../shared/phone"
 import { slugify } from "../shared/utils"
+
+const QR_EXPIRY_MINUTES = 10
 
 type RegisterOwnerInput = {
   tenantName: string
@@ -144,6 +147,80 @@ export const AuthService = {
         role: user.role,
       },
       tenant,
+    }
+  },
+
+  /**
+   * Owner kisi bhi active munshi ke liye ek short-lived QR token banata hai.
+   * Pehle se maujood unused tokens delete ho jaate hain.
+   */
+  async generateMunshiQr(tenantId: number, userId: number) {
+    const user = await db.user.findFirst({ where: { id: userId, tenantId } })
+
+    if (!user || !user.isActive) {
+      throw NotFoundException("user nahin mila ya inactive hai")
+    }
+
+    if (user.role === UserRole.OWNER) {
+      throw BadRequestException("owner ka QR generate nahin ho sakta")
+    }
+
+    // Purane unused tokens saaf karo
+    await db.munshiQrToken.deleteMany({
+      where: { userId, usedAt: null },
+    })
+
+    const expiresAt = new Date(Date.now() + QR_EXPIRY_MINUTES * 60 * 1000)
+    const qrToken = await db.munshiQrToken.create({
+      data: { userId, tenantId, expiresAt },
+    })
+
+    return { token: qrToken.token, expiresAt, userName: user.name }
+  },
+
+  /**
+   * Mobile app QR token scan karke login karta hai.
+   * Token ek baar hi use ho sakta hai aur waqt ke andar hona chahiye.
+   */
+  async loginWithQr(token: string) {
+    const qrToken = await db.munshiQrToken.findUnique({
+      where: { token },
+      include: { user: { include: { tenant: true } } },
+    })
+
+    if (!qrToken) {
+      throw AuthException("QR کوڈ درست نہیں ہے")
+    }
+
+    if (qrToken.usedAt) {
+      throw AuthException("یہ QR کوڈ پہلے استعمال ہو چکا ہے")
+    }
+
+    if (qrToken.expiresAt < new Date()) {
+      throw AuthException("QR کوڈ کی میعاد ختم ہو گئی ہے — دوبارہ generate کریں")
+    }
+
+    if (!qrToken.user.isActive || !qrToken.user.tenant.isActive) {
+      throw AuthException("یہ اکاؤنٹ فعال نہیں ہے")
+    }
+
+    await db.munshiQrToken.update({
+      where: { id: qrToken.id },
+      data: { usedAt: new Date() },
+    })
+
+    const auth = await createAuthToken(qrToken.user.id, qrToken.tenantId, qrToken.user.role)
+
+    return {
+      token: auth.token,
+      expiry: auth.expiry,
+      user: {
+        id: qrToken.user.id,
+        name: qrToken.user.name,
+        email: qrToken.user.email,
+        role: qrToken.user.role,
+      },
+      tenant: qrToken.user.tenant,
     }
   },
 

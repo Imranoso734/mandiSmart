@@ -59,8 +59,24 @@ model Tenant {
   payments     Payment[]
   expenses     Expense[]
   settlements  SupplierSettlement[]
+  qrTokens     MunshiQrToken[]
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
+}
+
+model MunshiQrToken {
+  id        Int       @id @default(autoincrement())
+  token     String    @unique @default(cuid())
+  userId    Int
+  tenantId  Int
+  expiresAt DateTime
+  usedAt    DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+  @@index([userId, tenantId])
 }
 
 model Password {
@@ -70,25 +86,26 @@ model Password {
 }
 
 model User {
-  id                  Int            @id @default(autoincrement())
+  id                  Int              @id @default(autoincrement())
   tenantId            Int
   name                String
   email               String
   phone               String?
   role                UserRole
-  isActive            Boolean        @default(true)
-  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  isActive            Boolean          @default(true)
+  tenant              Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   password            Password?
   createdById         Int?
-  createdBy           User?          @relation("UserCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdUsers        User[]         @relation("UserCreator")
-  salesCreated        Sale[]         @relation("SaleCreatedBy")
-  paymentsCreated     Payment[]      @relation("PaymentCreatedBy")
-  expensesCreated     Expense[]      @relation("ExpenseCreatedBy")
-  consignmentsCreated Consignment[]  @relation("ConsignmentCreatedBy")
-  consignmentsClosed  Consignment[]  @relation("ConsignmentClosedBy")
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  createdBy           User?            @relation("UserCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers        User[]           @relation("UserCreator")
+  salesCreated        Sale[]           @relation("SaleCreatedBy")
+  paymentsCreated     Payment[]        @relation("PaymentCreatedBy")
+  expensesCreated     Expense[]        @relation("ExpenseCreatedBy")
+  consignmentsCreated Consignment[]    @relation("ConsignmentCreatedBy")
+  consignmentsClosed  Consignment[]    @relation("ConsignmentClosedBy")
+  qrTokens            MunshiQrToken[]
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   @@unique([tenantId, email])
   @@index([tenantId, role])

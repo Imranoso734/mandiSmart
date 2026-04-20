@@ -29,3 +29,23 @@ export const LoginSchema = {
   additionalProperties: false,
 } as const
 export type LoginBody = FromSchema<typeof LoginSchema>
+
+export const GenerateQrSchema = {
+  type: "object",
+  properties: {
+    userId: { type: "integer", minimum: 1 },
+  },
+  required: ["userId"],
+  additionalProperties: false,
+} as const
+export type GenerateQrBody = FromSchema<typeof GenerateQrSchema>
+
+export const QrLoginSchema = {
+  type: "object",
+  properties: {
+    token: { type: "string", minLength: 10 },
+  },
+  required: ["token"],
+  additionalProperties: false,
+} as const
+export type QrLoginBody = FromSchema<typeof QrLoginSchema>
